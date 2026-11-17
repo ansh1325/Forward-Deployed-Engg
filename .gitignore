@@ -49,3 +49,6 @@ htmlcov/
 # Local database caches & temp logs
 *.log
 mssql_data/
+
+# Resumes
+*.tex

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloud-Native AI Coding Harness | Control Plane</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="logo-area">
+      <div class="logo-badge">⚡ HARNESS V1</div>
+      <div>
+        <h1 style="font-size: 16px; font-weight: 700;">Cloud-Native AI Coding Harness</h1>
+        <p style="font-size: 11px; color: var(--text-muted);">High-Concurrency Multi-Agent Sandbox Orchestrator</p>
+      </div>
+    </div>
+
+    <div class="metrics-bar">
+      <div class="metric-pill">
+        <span>Active Agents:</span>
+        <strong id="metricActiveAgents">0</strong> / 120
+      </div>
+      <div class="metric-pill">
+        <span>Warm Sandboxes:</span>
+        <strong id="metricWarmPool">5</strong> Ready
+      </div>
+      <div class="metric-pill">
+        <span>P99 Startup:</span>
+        <strong id="metricP99Latency">< 2.0s</strong>
+      </div>
+      <div class="metric-pill">
+        <span>Success Rate:</span>
+        <strong id="metricSuccessRate">100%</strong>
+      </div>
+    </div>
+
+    <div class="action-buttons">
+      <button class="btn btn-benchmark" id="btnBenchmark">▶ Run Benchmark Fix</button>
+      <button class="btn btn-primary" id="btnNewTask">+ Dispatch Agent</button>
+    </div>
+  </header>
+
+  <div class="dashboard-grid">
+    <!-- Panel 1: Agent Fleet & Task List -->
+    <div class="panel">
+      <div class="panel-header">
+        <span>Fleet Orchestrator</span>
+        <span id="taskCount" style="font-size: 12px; color: var(--accent);">0 Tasks</span>
+      </div>
+      <div class="panel-body" id="taskListContainer">
+        <!-- Dynamically populated -->
+      </div>
+    </div>
+
+    <!-- Panel 2: Live Reasoning & Execution Traces -->
+    <div class="panel">
+      <div class="panel-header">
+        <span>Live Agent Reasoning & Tool Execution</span>
+        <span id="activeTaskIdDisplay" style="font-size: 12px; color: var(--text-muted);">No task selected</span>
+      </div>
+      <div class="panel-body" id="traceContainer">
+        <div style="color: var(--text-muted); font-size: 13px; text-align: center; margin-top: 40px;">
+          Select a task on the left or click <strong>Run Benchmark Fix</strong> to stream live execution traces.
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel 3: Terminal Console & Diff Viewer -->
+    <div class="panel">
+      <div class="tabs">
+        <div class="tab active" data-tab="tabTerminal">Sandbox Terminal</div>
+        <div class="tab" data-tab="tabDiff">Generated Changes</div>
+        <div class="tab" data-tab="tabPR">PR Payload</div>
+      </div>
+
+      <!-- Tab 1: Terminal Console -->
+      <div class="tab-content active" id="tabTerminal">
+        <div class="terminal-window" id="terminalOutput">
+[HARNESS DAEMON ONLINE]
+Waiting for agent sandbox execution stream...
+        </div>
+      </div>
+
+      <!-- Tab 2: Diff Window -->
+      <div class="tab-content" id="tabDiff">
+        <div class="diff-window" id="diffOutput">
+No diff generated yet.
+        </div>
+      </div>
+
+      <!-- Tab 3: PR Delivery Window -->
+      <div class="tab-content" id="tabPR">
+        <div style="background: #182234; padding: 18px; border-radius: 6px; border: 1px solid var(--border);" id="prContent">
+          <h3 id="prTitle" style="color: var(--accent); margin-bottom: 10px;">PR Not Ready</h3>
+          <p id="prBody" style="font-size: 13px; color: var(--text-muted); white-space: pre-wrap;">Pending verification...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

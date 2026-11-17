@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  coding-harness:
+    build: .
+    container_name: cloud-native-ai-coding-harness
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - WARM_SANDBOX_TARGET=5
+      - MAX_CONCURRENT_AGENTS=120
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    volumes:
+      - sandbox_cache:/home/harnessuser/.cache/ai_coding_harness
+    restart: unless-stopped
+
+volumes:
+  sandbox_cache:
+    driver: local

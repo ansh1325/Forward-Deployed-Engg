@@ -21,8 +21,15 @@ if str(project_root) not in sys.path:
 
 load_dotenv(project_root / ".env")
 
-# Import the compiled graph and tools list dynamically
-from src.orchestrator import fde_agent
+# Import the compiled graph dynamically with versioned cache invalidation
+@st.cache_resource
+def _get_fde_agent(_version: str = "v3_gemini_flash_lite"):
+    import importlib
+    import src.orchestrator as _orch
+    importlib.reload(_orch)
+    return _orch.fde_agent
+
+fde_agent = _get_fde_agent()
 
 # ==========================================
 # 2. SQL CREDENTIALS MAPPING FROM .ENV

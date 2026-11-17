@@ -48,10 +48,15 @@ elif AGENT_LLM_SETTING == "DEEPSEEK":
         openai_api_key=os.getenv("DEEPSEEK_API_KEY"),
         base_url="https://api.deepseek.com",     # Fixed connection string url endpoint
         max_tokens=2048,                                   # Gives the deep reasoner plenty of output runway
-        # extra_body={
-        #     "thinking": {"type": "enabled"},              # Activates DeepSeek Deep-Thinking mode
-        #     "reasoning_effort": "high"                     # Drives maximal reasoning depth for logic maps
-        # }
+    )
+
+elif AGENT_LLM_SETTING == "GEMINI":
+    print("✨ Brain Mode: Utilizing Native Google Gemini Reasoner (gemini-2.5-flash)...")
+    from langchain_google_genai import ChatGoogleGenerativeAI
+    llm = ChatGoogleGenerativeAI(
+        model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+        google_api_key=os.getenv("GEMINI_API_KEY"),
+        temperature=0
     )
 
 else:  # FALLBACK / DEFAULT RUNNER MODE

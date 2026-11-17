@@ -52,7 +52,7 @@ elif AGENT_LLM_SETTING == "DEEPSEEK":
 
 elif AGENT_LLM_SETTING == "GEMINI":
     target_model = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest").strip()
-    if target_model in ("gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"):
+    if not target_model or any(bad in target_model for bad in ["2.5", "2.0", "1.5"]):
         target_model = "gemini-flash-lite-latest"
     print(f"✨ Brain Mode: Utilizing Native Google Gemini Reasoner ({target_model})...")
     from langchain_google_genai import ChatGoogleGenerativeAI

@@ -45,33 +45,35 @@ db_port = os.getenv("SQL_SERVER_PORT", "1433")
 db_user = os.getenv("SQL_AGENT_USER", "USR_FDE_RO")
 db_password = os.getenv("SQL_AGENT_PASSWORD")
 
-if not PINECONE_API_KEY:
-    raise ValueError("CRITICAL: Ensure PINECONE_API_KEY is present in your active .env profile.")
-
-if EMBEDDINGS_MODEL_SETTING == "OPENAI":
-    print("🤖 Mode: Connecting to Cloud OpenAI Index (1536 Dim Space)...")
-    embeddings = OpenAIEmbeddings()
-    INDEX_NAME = "fde-sop-index-openai"
-else :
-    local_model_target = os.getenv("Local_Embedding_Model", "BAAI/bge-m3").strip()
-    
-    print(f"🤗 Mode: Connecting to Local Fallback [{local_model_target}] Index (1024 Dim Space)...")
-
-    try:
-        import streamlit as st
-        if st.runtime.exists():
-            embeddings = get_cached_huggingface_embeddings(local_model_target)
-        else:
+if PINECONE_API_KEY:
+    if EMBEDDINGS_MODEL_SETTING == "OPENAI":
+        print("🤖 Mode: Connecting to Cloud OpenAI Index (1536 Dim Space)...")
+        embeddings = OpenAIEmbeddings()
+        INDEX_NAME = "fde-sop-index-openai"
+    else:
+        local_model_target = os.getenv("Local_Embedding_Model", "BAAI/bge-m3").strip()
+        print(f"🤗 Mode: Connecting to Local Fallback [{local_model_target}] Index (1024 Dim Space)...")
+        try:
+            import streamlit as st
+            if st.runtime.exists():
+                embeddings = get_cached_huggingface_embeddings(local_model_target)
+            else:
+                from langchain_huggingface import HuggingFaceEmbeddings
+                embeddings = HuggingFaceEmbeddings(model_name=local_model_target, model_kwargs={'device': 'cpu'})
+        except Exception:
             from langchain_huggingface import HuggingFaceEmbeddings
             embeddings = HuggingFaceEmbeddings(model_name=local_model_target, model_kwargs={'device': 'cpu'})
-    except ImportError:
-        from langchain_huggingface import HuggingFaceEmbeddings
-        embeddings = HuggingFaceEmbeddings(model_name=local_model_target, model_kwargs={'device': 'cpu'})
 
-    INDEX_NAME = "fde-sop-index-local"
+        INDEX_NAME = "fde-sop-index-local"
 
-vector_store = PineconeVectorStore(index_name=INDEX_NAME, embedding=embeddings)
-retriever = vector_store.as_retriever(search_kwargs={"k": 2})
+    try:
+        vector_store = PineconeVectorStore(index_name=INDEX_NAME, embedding=embeddings)
+        retriever = vector_store.as_retriever(search_kwargs={"k": 2})
+    except Exception as e:
+        print(f"⚠️ Pinecone index connection fallback: {e}")
+        retriever = None
+else:
+    retriever = None
 
 # ==========================================
 # 2. CORE FDE AGENT TOOLS
@@ -118,7 +120,56 @@ def query_telemetry_db(sql_query: str) -> str:
                 
             return formatted_output
     except Exception as e:
-        return f"Database Error: {str(e)}"
+        # Graceful Cloud Fallback: If external MSSQL is unreachable, query local telemetry dataset in SQLite
+        return _query_fallback_sqlite(sql_query)
+
+
+def _query_fallback_sqlite(sql_query: str) -> str:
+    """In-memory SQLite fallback mirroring FDE_VIEWS.VW_ACTIVE_FLEET for public cloud previews."""
+    import sqlite3
+    import re
+    import pandas as pd
+
+    csv_path = project_root / "data" / "raw" / "dynamic_supply_chain_logistics_dataset.csv"
+    if not csv_path.exists():
+        return "Database Connection Failed: Live MSSQL unreachable and raw dataset missing."
+
+    try:
+        conn = sqlite3.connect(":memory:")
+        df = pd.read_csv(csv_path)
+        legacy_mapping = {
+            'timestamp': 'Timestamp',
+            'vehicle_gps_latitude': 'Latitude',
+            'vehicle_gps_longitude': 'Longitude',
+            'iot_temperature': 'Current_Temperature_C',
+            'cargo_condition_status': 'Cargo_Condition_Code',
+            'risk_classification': 'Risk_Classification',
+            'delay_probability': 'Delay_Probability',
+            'port_congestion_level': 'Port_Congestion_Level',
+            'route_risk_level': 'Route_Risk_Index'
+        }
+        df_clean = df[list(legacy_mapping.keys())].rename(columns=legacy_mapping)
+        df_clean.to_sql("VW_ACTIVE_FLEET", conn, index=False)
+
+        clean_query = sql_query.replace("FDE_VIEWS.VW_ACTIVE_FLEET", "VW_ACTIVE_FLEET").replace("fde_views.vw_active_fleet", "VW_ACTIVE_FLEET")
+        top_match = re.search(r"SELECT\s+TOP\s+(\d+)\s+", clean_query, re.IGNORECASE)
+        if top_match:
+            limit_val = top_match.group(1)
+            clean_query = re.sub(r"SELECT\s+TOP\s+\d+\s+", "SELECT ", clean_query, flags=re.IGNORECASE)
+            clean_query += f" LIMIT {limit_val}"
+
+        cursor = conn.execute(clean_query)
+        columns = [d[0] for d in cursor.description]
+        rows = cursor.fetchmany(10)
+        if not rows:
+            return "No records matched the query criteria."
+
+        formatted_output = f"COLUMNS: {', '.join(columns)}\n"
+        for row in rows:
+            formatted_output += str(tuple(row)) + "\n"
+        return formatted_output
+    except Exception as sqle:
+        return f"Telemetry Query Failed: {sqle}"
 
 @tool
 def fetch_corridor_conditions(latitude: float, longitude: float) -> str:
@@ -154,17 +205,28 @@ def search_compliance_sop(query: str) -> str:
     Searches enterprise Standard Operating Procedures (SOPs) indexed in the Pinecone Vector DB.
     Use this to retrieve regulatory thresholds, cold-chain breach mitigations, and rerouting rules.
     """
-    try:
-        matched_docs = retriever.invoke(query)
-        if not matched_docs:
-            return "No matching compliance clauses found."
-            
-        formatted_context = "\n\n".join(
-            [f"[Source: {doc.metadata.get('source_file', 'SOP')} | Format: {doc.metadata.get('file_format', 'RAW')}]\n{doc.page_content}" for doc in matched_docs]
-        )
-        return f"--- COMPLIANCE SOP CONTEXT ---\n{formatted_context}\n------------------------------"
-    except Exception as e:
-        return f"Vector Store Retrieval Error: {str(e)}"
+    if retriever:
+        try:
+            matched_docs = retriever.invoke(query)
+            if matched_docs:
+                formatted_context = "\n\n".join(
+                    [f"[Source: {doc.metadata.get('source_file', 'SOP')} | Format: {doc.metadata.get('file_format', 'RAW')}]\n{doc.page_content}" for doc in matched_docs]
+                )
+                return f"--- COMPLIANCE SOP CONTEXT ---\n{formatted_context}\n------------------------------"
+        except Exception as e:
+            print(f"Vector retrieval notice: {e}")
+
+    # Direct fallback: read from data/policy/Cold_Chain_Incident_SOP_v2.md
+    sop_file = project_root / "data" / "policy" / "Cold_Chain_Incident_SOP_v2.md"
+    if sop_file.exists():
+        try:
+            with open(sop_file, "r", encoding="utf-8") as f:
+                policy_text = f.read()
+            return f"--- COMPLIANCE SOP CONTEXT (Direct Policy Document) ---\n{policy_text}\n------------------------------"
+        except Exception as e:
+            return f"Policy Read Error: {e}"
+
+    return "No matching compliance clauses found."
 
 # ==========================================
 # 3. LOCAL VERIFICATION

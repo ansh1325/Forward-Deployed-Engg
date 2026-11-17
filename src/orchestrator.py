@@ -51,10 +51,13 @@ elif AGENT_LLM_SETTING == "DEEPSEEK":
     )
 
 elif AGENT_LLM_SETTING == "GEMINI":
-    print("✨ Brain Mode: Utilizing Native Google Gemini Reasoner (gemini-2.5-flash)...")
+    target_model = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest").strip()
+    if target_model in ("gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"):
+        target_model = "gemini-flash-lite-latest"
+    print(f"✨ Brain Mode: Utilizing Native Google Gemini Reasoner ({target_model})...")
     from langchain_google_genai import ChatGoogleGenerativeAI
     llm = ChatGoogleGenerativeAI(
-        model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+        model=target_model,
         google_api_key=os.getenv("GEMINI_API_KEY"),
         temperature=0
     )
@@ -71,8 +74,26 @@ llm_with_tools = llm.bind_tools(fde_tools)
 # 3. GRAPH ARCHITECTURE ASSEMBLY
 # ==========================================
 def reasoning_node(state: AgentState):
-    response = llm_with_tools.invoke(state["messages"])
-    return {"messages": [response]}
+    try:
+        response = llm_with_tools.invoke(state["messages"])
+        return {"messages": [response]}
+    except Exception as e:
+        print(f"LLM invoke exception caught: {e}")
+        from langchain_core.messages import AIMessage
+        return {
+            "messages": [
+                AIMessage(
+                    content=(
+                        f"### ⚠️ Model Routing Notice\n"
+                        f"The live reasoning model encountered an API restriction (`{type(e).__name__}`).\n\n"
+                        f"**Available Telemetry & Compliance Queries:**\n"
+                        f"- *Find active shipments near Los Angeles (Latitude ~33.8, Longitude ~-118.1)*\n"
+                        f"- *Check local corridor weather and cargo temperature compliance*\n"
+                        f"- *Explain Tier 1 vs Tier 2 incident escalation*"
+                    )
+                )
+            ]
+        }
 
 print("⚙️ Compiling LangGraph FDE Orchestrator...")
 graph_builder = StateGraph(AgentState)
